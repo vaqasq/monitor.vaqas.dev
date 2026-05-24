@@ -8,7 +8,8 @@ import (
 )
 
 func main() {
-
+	fmt.Printf("%t", fetchContainerList())
+	fmt.Printf("%t", fetchLiveContainerMetrics())
 }
 
 func fetchContainerList() bool {
