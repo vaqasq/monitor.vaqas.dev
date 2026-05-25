@@ -1,64 +1,115 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
-	"os"
+	"strconv"
 	"strings"
 )
 
 func main() {
-	fmt.Printf("%t", fetchContainerList())
-	fmt.Printf("%t", fetchLiveContainerMetrics())
+
+	/* Creates an internet unix socket in the machine, dial is wrapped in transport, which is wrapped in client */
+	httpc := http.Client{
+		Transport: &http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial("unix", "/var/run/docker.sock")
+			},
+		},
+	}
+
+	fmt.Printf("Container List Data: %v", fetchContainerList(httpc))
+	fmt.Printf("Live Container Metrics: %v", fetchLiveContainerMetrics(httpc)) // This is live though? How to only take 1 round?
+
 }
 
-func fetchContainerList() bool {
+func fetchContainerList(client http.Client) string {
 
-	containerListAPI := os.Getenv("CONTAINER_LIST_API")
-
+	/* Structs to recieve json data*/
 	type Health struct {
 		Status        string `json:"Status"`
 		FailingStreak int    `json:"FailingStreak"`
 	}
 
 	type Resp struct {
-		State  string `json:"State"`
-		Status string `json:"Status"`
-		Health Health `json:"Health"`
+		ID     string   `json:"Id"`
+		Names  []string `json:"Names"`
+		State  string   `json:"State"`
+		Status string   `json:"Status"`
+		Health Health   `json:"Health"`
 	}
 
-	resp, err := http.Get(containerListAPI)
+	/* Request json */
+
+	response, err := client.Get("http://localhost/containers/json")
 
 	if err != nil {
-		fmt.Printf("Error while retrieving ContainerList: %v", err)
+		fmt.Printf("Error while fetching Container List: %v ", err)
 	}
 
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(contentType, "application/json") {
-		return true
-	}
+	defer response.Body.Close()
 
-	return false
+	/* Unpacking json */
+
+	var resp Resp
+	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
+		fmt.Printf("Error while unpacking json: %v", err)
+	}
+	// Responses are now in resp.State, resp.Status, resp.Health, etc
+
+	// join the slice of strings of Names
+	names := strings.Join(resp.Names, " ")
+	containerList := "IDs: " + resp.ID + ", Names: " + names + ", State: " + resp.State +
+		", Status: " + resp.Status + ", Health.Status: " + resp.Health.Status + ", Health.FailingStreak: " +
+		strconv.Itoa(resp.Health.FailingStreak)
+
+	return containerList
 
 }
 
-func fetchLiveContainerMetrics() bool {
+func fetchLiveContainerMetrics(client http.Client) string {
 
-	liveStreamMetricsAPI := os.Getenv(("LIVE_STREAM_METRICS_API"))
+	/* Structs to recieve json data*/
 
-	// Insert STRUCT for the specific data you want to receive.
+	type Resp struct {
+		UsedMemory      int `json:"used_memory"`
+		AvailableMemory int `json:"available_memory"`
+		CPUDelta        int `json:"cpu_delta"`
+		SystemCPUDelta  int `json:"system_cpu_delta"`
+		NumberCPUs      int `json:"number_cpus"`
+	}
 
-	resp, err := http.Get(liveStreamMetricsAPI)
+	/* Request json */
+
+	response, err := client.Get("http://localhost/containers/my-website/stats?stream=false")
 
 	if err != nil {
-		fmt.Printf("Error whiel retrieving LiveContainerMetrics: %v ", err)
+		fmt.Printf("Error while fetching Live Container Metrics: %v", err)
 	}
 
-	contentType := resp.Header.Get("Content-Type")
-	if strings.Contains(contentType, "application/json") {
-		return true
+	defer response.Body.Close()
+
+	/* Unpacking json */
+
+	var resp Resp
+	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
+		fmt.Printf("Error while unpacking json: %v", err)
 	}
 
-	return false
+	// Memory usage % = (used_memory / available_memory) * 100.0
+	// CPU usage % = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
+
+	memoryUsage := (float64(resp.UsedMemory) / float64(resp.AvailableMemory)) * 100.0
+	cpuUsage := (float64(resp.CPUDelta) / float64(resp.SystemCPUDelta)) * float64(resp.NumberCPUs) * 100.0
+
+	memoryUsageString := strconv.FormatFloat(float64(memoryUsage), 'f', 2, 64)
+	cpuUsageString := strconv.FormatFloat(float64(cpuUsage), 'f', 2, 64)
+
+	containerStats := "Memory Usage: " + memoryUsageString + ", CPU Usage: " + cpuUsageString
+
+	return containerStats
 
 }
