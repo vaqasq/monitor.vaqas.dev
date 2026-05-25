@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -21,8 +20,8 @@ func main() {
 		},
 	}
 
-	ContainerListData, IDs := fetchContainerList(httpc)
-	fmt.Printf("\nContainer List Data\n %v\n", ContainerListData)
+	ContainerInfoList, IDs := fetchContainerList(httpc)
+	fmt.Printf("\nContainer List Data\n %v\n", ContainerInfoList)
 	fmt.Printf("Live Container Metrics\n %v\n", fetchLiveContainerMetrics(httpc, IDs)) // This is, by default, a live stream, but I made it just 1 json"
 
 }
@@ -67,7 +66,7 @@ func fetchContainerList(client http.Client) (string, []string) {
 	// Responses are now in resp.State, resp.Status, resp.Health, etc
 
 	// return values
-	var containerList string
+	var sb strings.Builder
 	var containerIDs []string
 
 	// Must iterate because Resp is now a slice
@@ -76,14 +75,13 @@ func fetchContainerList(client http.Client) (string, []string) {
 		// join the slice of strings of Names
 		names := strings.Join(container.Names, " ")
 
-		containerList += "IDs: " + container.ID + ", Names: " + names + ", State: " + container.State +
-			", Status: " + container.Status + ", Health.Status: " + container.Health.Status + ", Health.FailingStreak: " +
-			strconv.Itoa(container.Health.FailingStreak)
+		sb.WriteString(fmt.Sprintf("IDs: %s, Names: %s, State: %s, Status: %s, Health.Status: %s, Health.FailingStreak: %d\n",
+			container.ID, names, container.State, container.Status, container.Health.Status, container.Health.FailingStreak))
 
 		containerIDs = append(containerIDs, container.ID)
 	}
 
-	return containerList, containerIDs
+	return sb.String(), containerIDs
 }
 
 func fetchLiveContainerMetrics(client http.Client, containerIDs []string) string {
@@ -118,7 +116,7 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) string
 
 	/* Request json */
 
-	var ContainerStats string
+	var sb strings.Builder
 
 	for _, ID := range containerIDs {
 		response, err := client.Get("http://localhost/containers/" + ID + "/stats?stream=false") //will need to revert this at some point
@@ -126,8 +124,6 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) string
 		if err != nil {
 			fmt.Printf("Error while fetching Live Container Metrics: %v", err)
 		}
-
-		defer response.Body.Close()
 
 		/* Debugging code
 		body, _ := io.ReadAll(response.Body)
@@ -141,21 +137,20 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) string
 			fmt.Printf("Error while unpacking json for LiveContainerMetrics: %v", err)
 		}
 
+		response.Body.Close()
+
 		// Memory usage % = (used_memory / available_memory) * 100.0
 		// CPU usage % = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
 
 		memoryUsage := (float64(resp.MemoryStats.Usage) / float64(resp.MemoryStats.Limit)) * 100.0
 
-		cpu_delta := resp.CPUStats.CPUUsage.TotalUsage - resp.PreCPUStats.CPUUsage.TotalUsage
-		system_cpu_delta := resp.CPUStats.SystemCPUUsage - resp.PreCPUStats.SystemCPUUsage
+		cpuDelta := resp.CPUStats.CPUUsage.TotalUsage - resp.PreCPUStats.CPUUsage.TotalUsage
+		systemCPUDelta := resp.CPUStats.SystemCPUUsage - resp.PreCPUStats.SystemCPUUsage
 
-		cpuUsage := (float64(cpu_delta) / float64(system_cpu_delta)) * float64(resp.CPUStats.OnlineCPUs) * 100.0
+		cpuUsage := (float64(cpuDelta) / float64(systemCPUDelta)) * float64(resp.CPUStats.OnlineCPUs) * 100.0
 
-		memoryUsageString := strconv.FormatFloat(float64(memoryUsage), 'f', 2, 64)
-		cpuUsageString := strconv.FormatFloat(float64(cpuUsage), 'f', 2, 64)
-
-		ContainerStats += "ID: " + ID + ", Memory Usage: " + memoryUsageString + ", CPU Usage: " + cpuUsageString + "\n"
+		sb.WriteString(fmt.Sprintf("ID: %s, Memory Usage: %.2f%%, CPU Usage: %.2f%%\n", ID, memoryUsage, cpuUsage))
 
 	}
-	return ContainerStats
+	return sb.String()
 }
