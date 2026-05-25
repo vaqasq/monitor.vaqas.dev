@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
-	"strconv"
-	"strings"
 )
 
 func main() {
@@ -60,14 +59,18 @@ func fetchContainerList(client http.Client) string {
 	}
 	// Responses are now in resp.State, resp.Status, resp.Health, etc
 
-	// join the slice of strings of Names
-	names := strings.Join(resp.Names, " ")
-	containerList := "IDs: " + resp.ID + ", Names: " + names + ", State: " + resp.State +
-		", Status: " + resp.Status + ", Health.Status: " + resp.Health.Status + ", Health.FailingStreak: " +
-		strconv.Itoa(resp.Health.FailingStreak)
+	body, _ := io.ReadAll(response.Body)
+	return string(body)
 
-	return containerList
+	/*
+		// join the slice of strings of Names
+		names := strings.Join(resp.Names, " ")
+		containerList := "IDs: " + resp.ID + ", Names: " + names + ", State: " + resp.State +
+			", Status: " + resp.Status + ", Health.Status: " + resp.Health.Status + ", Health.FailingStreak: " +
+			strconv.Itoa(resp.Health.FailingStreak)
 
+		return containerList
+	*/
 }
 
 func fetchLiveContainerMetrics(client http.Client) string {
@@ -102,14 +105,18 @@ func fetchLiveContainerMetrics(client http.Client) string {
 	// Memory usage % = (used_memory / available_memory) * 100.0
 	// CPU usage % = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
 
-	memoryUsage := (float64(resp.UsedMemory) / float64(resp.AvailableMemory)) * 100.0
-	cpuUsage := (float64(resp.CPUDelta) / float64(resp.SystemCPUDelta)) * float64(resp.NumberCPUs) * 100.0
+	body, _ := io.ReadAll(response.Body)
+	return string(body)
 
-	memoryUsageString := strconv.FormatFloat(float64(memoryUsage), 'f', 2, 64)
-	cpuUsageString := strconv.FormatFloat(float64(cpuUsage), 'f', 2, 64)
+	/*
+		memoryUsage := (float64(resp.UsedMemory) / float64(resp.AvailableMemory)) * 100.0
+		cpuUsage := (float64(resp.CPUDelta) / float64(resp.SystemCPUDelta)) * float64(resp.NumberCPUs) * 100.0
 
-	containerStats := "Memory Usage: " + memoryUsageString + ", CPU Usage: " + cpuUsageString
+		memoryUsageString := strconv.FormatFloat(float64(memoryUsage), 'f', 2, 64)
+		cpuUsageString := strconv.FormatFloat(float64(cpuUsage), 'f', 2, 64)
 
-	return containerStats
+		containerStats := "Memory Usage: " + memoryUsageString + ", CPU Usage: " + cpuUsageString
+
+		return containerStats */
 
 }
