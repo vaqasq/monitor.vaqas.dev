@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -29,7 +28,7 @@ func main() {
 
 func fetchContainerList(client http.Client) string {
 
-	/* Structs to recieve json data*/
+	/* Nested structs to recieve json data*/
 	type Health struct {
 		Status        string `json:"Status"`
 		FailingStreak int    `json:"FailingStreak"`
@@ -53,7 +52,7 @@ func fetchContainerList(client http.Client) string {
 
 	defer response.Body.Close()
 
-	/* Error Testing, Raw Json
+	/* Debugging code, Raw Json
 	body, _ := io.ReadAll(response.Body)
 	return string(body)
 	*/
@@ -86,17 +85,42 @@ func fetchLiveContainerMetrics(client http.Client) string {
 
 	/* Structs to recieve json data*/
 
-	type Resp struct {
+	/*
 		UsedMemory      int `json:"used_memory"`
 		AvailableMemory int `json:"available_memory"`
 		CPUDelta        int `json:"cpu_delta"`
 		SystemCPUDelta  int `json:"system_cpu_delta"`
 		NumberCPUs      int `json:"number_cpus"`
+	*/
+	type CPUUsage struct {
+		TotalUsage int `json:"total_usage"`
+	}
+
+	type MemoryStats struct {
+		Usage int `json:"usage"`
+		Limit int `json:"limit"`
+	}
+
+	type PreCPUStats struct {
+		CPUUsage       CPUUsage `json:"cpu_usage"`
+		SystemCPUUsage int      `json:"system_cpu_usage"`
+	}
+
+	type CPUStats struct {
+		CPUUsage       CPUUsage `json:"cpu_usage"`
+		OnlineCPUs     int      `json:"online_cpus"`
+		SystemCPUUsage int      `json:"system_cpu_usage"`
+	}
+
+	type Resp struct {
+		MemoryStats MemoryStats `json:"memory_stats"`
+		PreCPUStats PreCPUStats `json:"precpu_stats"`
+		CPUStats    CPUStats    `json:"cpu_stats"`
 	}
 
 	/* Request json */
 
-	response, err := client.Get("http://localhost/containers/my-website/stats?stream=false")
+	response, err := client.Get("http://localhost/containers/my-website/stats?stream=false") //will need to revert this at some point
 
 	if err != nil {
 		fmt.Printf("Error while fetching Live Container Metrics: %v", err)
@@ -104,29 +128,33 @@ func fetchLiveContainerMetrics(client http.Client) string {
 
 	defer response.Body.Close()
 
+	/* Debugging code
 	body, _ := io.ReadAll(response.Body)
-	return string(body)
+	return string(body) */
 
 	/* Unpacking json */
-	/*
-		var resp Resp
-		if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
-			fmt.Printf("Error while unpacking json for LiveContainerMetrics: %v", err)
-		}
 
-		// Memory usage % = (used_memory / available_memory) * 100.0
-		// CPU usage % = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
+	var resp Resp
 
+	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
+		fmt.Printf("Error while unpacking json for LiveContainerMetrics: %v", err)
+	}
 
+	// Memory usage % = (used_memory / available_memory) * 100.0
+	// CPU usage % = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
 
-			memoryUsage := (float64(resp.UsedMemory) / float64(resp.AvailableMemory)) * 100.0
-			cpuUsage := (float64(resp.CPUDelta) / float64(resp.SystemCPUDelta)) * float64(resp.NumberCPUs) * 100.0
+	memoryUsage := (float64(resp.MemoryStats.Usage) / float64(resp.MemoryStats.Limit)) * 100.0
 
-			memoryUsageString := strconv.FormatFloat(float64(memoryUsage), 'f', 2, 64)
-			cpuUsageString := strconv.FormatFloat(float64(cpuUsage), 'f', 2, 64)
+	cpu_delta := resp.CPUStats.CPUUsage.TotalUsage - resp.PreCPUStats.CPUUsage.TotalUsage
+	system_cpu_delta := resp.CPUStats.SystemCPUUsage - resp.PreCPUStats.SystemCPUUsage
 
-			containerStats := "Memory Usage: " + memoryUsageString + ", CPU Usage: " + cpuUsageString
+	cpuUsage := (float64(cpu_delta) / float64(system_cpu_delta)) * float64(resp.CPUStats.OnlineCPUs) * 100.0
 
-			return containerStats */
+	memoryUsageString := strconv.FormatFloat(float64(memoryUsage), 'f', 2, 64)
+	cpuUsageString := strconv.FormatFloat(float64(cpuUsage), 'f', 2, 64)
+
+	containerStats := "Memory Usage: " + memoryUsageString + ", CPU Usage: " + cpuUsageString
+
+	return containerStats
 
 }
