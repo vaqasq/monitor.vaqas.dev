@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 func main() {
@@ -50,26 +53,33 @@ func fetchContainerList(client http.Client) string {
 
 	defer response.Body.Close()
 
+	/* Error Testing, Raw Json
 	body, _ := io.ReadAll(response.Body)
 	return string(body)
+	*/
 
 	/* Unpacking json */
-	/*
-		var resp []Resp
-		if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
-			fmt.Printf("Error while unpacking json for ContainerList: %v", err)
-		}
-		// Responses are now in resp.State, resp.Status, resp.Health, etc
 
+	var resp []Resp
+	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
+		fmt.Printf("Error while unpacking json for ContainerList: %v", err)
+	}
+	// Responses are now in resp.State, resp.Status, resp.Health, etc
 
-			// join the slice of strings of Names
-			names := strings.Join(resp.Names, " ")
-			containerList := "IDs: " + resp.ID + ", Names: " + names + ", State: " + resp.State +
-				", Status: " + resp.Status + ", Health.Status: " + resp.Health.Status + ", Health.FailingStreak: " +
-				strconv.Itoa(resp.Health.FailingStreak)
+	var containerList string // return value
 
-			return containerList
-	*/
+	// Must iterate because Resp is now a slice
+	for _, container := range resp {
+
+		// join the slice of strings of Names
+		names := strings.Join(container.Names, " ")
+
+		containerList += "IDs: " + container.ID + ", Names: " + names + ", State: " + container.State +
+			", Status: " + container.Status + ", Health.Status: " + container.Health.Status + ", Health.FailingStreak: " +
+			strconv.Itoa(container.Health.FailingStreak)
+	}
+
+	return containerList
 }
 
 func fetchLiveContainerMetrics(client http.Client) string {
