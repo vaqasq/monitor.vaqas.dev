@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -51,25 +50,25 @@ func fetchContainerList(client http.Client) string {
 
 	defer response.Body.Close()
 
-	/* Unpacking json */
-
-	var resp []Resp
-	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
-		fmt.Printf("Error while unpacking json for ContainerList: %v", err)
-	}
-	// Responses are now in resp.State, resp.Status, resp.Health, etc
-
 	body, _ := io.ReadAll(response.Body)
 	return string(body)
 
+	/* Unpacking json */
 	/*
-		// join the slice of strings of Names
-		names := strings.Join(resp.Names, " ")
-		containerList := "IDs: " + resp.ID + ", Names: " + names + ", State: " + resp.State +
-			", Status: " + resp.Status + ", Health.Status: " + resp.Health.Status + ", Health.FailingStreak: " +
-			strconv.Itoa(resp.Health.FailingStreak)
+		var resp []Resp
+		if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
+			fmt.Printf("Error while unpacking json for ContainerList: %v", err)
+		}
+		// Responses are now in resp.State, resp.Status, resp.Health, etc
 
-		return containerList
+
+			// join the slice of strings of Names
+			names := strings.Join(resp.Names, " ")
+			containerList := "IDs: " + resp.ID + ", Names: " + names + ", State: " + resp.State +
+				", Status: " + resp.Status + ", Health.Status: " + resp.Health.Status + ", Health.FailingStreak: " +
+				strconv.Itoa(resp.Health.FailingStreak)
+
+			return containerList
 	*/
 }
 
@@ -95,28 +94,29 @@ func fetchLiveContainerMetrics(client http.Client) string {
 
 	defer response.Body.Close()
 
-	/* Unpacking json */
-
-	var resp Resp
-	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
-		fmt.Printf("Error while unpacking json for LiveContainerMetrics: %v", err)
-	}
-
-	// Memory usage % = (used_memory / available_memory) * 100.0
-	// CPU usage % = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
-
 	body, _ := io.ReadAll(response.Body)
 	return string(body)
 
+	/* Unpacking json */
 	/*
-		memoryUsage := (float64(resp.UsedMemory) / float64(resp.AvailableMemory)) * 100.0
-		cpuUsage := (float64(resp.CPUDelta) / float64(resp.SystemCPUDelta)) * float64(resp.NumberCPUs) * 100.0
+		var resp Resp
+		if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
+			fmt.Printf("Error while unpacking json for LiveContainerMetrics: %v", err)
+		}
 
-		memoryUsageString := strconv.FormatFloat(float64(memoryUsage), 'f', 2, 64)
-		cpuUsageString := strconv.FormatFloat(float64(cpuUsage), 'f', 2, 64)
+		// Memory usage % = (used_memory / available_memory) * 100.0
+		// CPU usage % = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
 
-		containerStats := "Memory Usage: " + memoryUsageString + ", CPU Usage: " + cpuUsageString
 
-		return containerStats */
+
+			memoryUsage := (float64(resp.UsedMemory) / float64(resp.AvailableMemory)) * 100.0
+			cpuUsage := (float64(resp.CPUDelta) / float64(resp.SystemCPUDelta)) * float64(resp.NumberCPUs) * 100.0
+
+			memoryUsageString := strconv.FormatFloat(float64(memoryUsage), 'f', 2, 64)
+			cpuUsageString := strconv.FormatFloat(float64(cpuUsage), 'f', 2, 64)
+
+			containerStats := "Memory Usage: " + memoryUsageString + ", CPU Usage: " + cpuUsageString
+
+			return containerStats */
 
 }
