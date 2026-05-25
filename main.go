@@ -22,7 +22,7 @@ func main() {
 	}
 
 	fmt.Printf("Container List Data: %v", fetchContainerList(httpc))
-	fmt.Printf("Live Container Metrics: %v", fetchLiveContainerMetrics(httpc)) // This is live though? How to only take 1 round?
+	fmt.Printf("Live Container Metrics: %v", fetchLiveContainerMetrics(httpc)) // This is, by default, a live stream, but I made it just 1 json"
 
 }
 
