@@ -21,8 +21,8 @@ func main() {
 	}
 
 	ContainerInfoList, IDs := fetchContainerList(httpc)
-	fmt.Printf("\nContainer List Data\n %v\n", ContainerInfoList)
-	fmt.Printf("Live Container Metrics\n %v\n", fetchLiveContainerMetrics(httpc, IDs)) // This is, by default, a live stream, but I made it just 1 json"
+	fmt.Printf("\nContainer List Data\n%v\n", ContainerInfoList)
+	fmt.Printf("Live Container Metrics\n%v\n", fetchLiveContainerMetrics(httpc, IDs)) // This is, by default, a live stream, but I made it just 1 json"
 
 }
 
@@ -149,7 +149,7 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) string
 
 		cpuUsage := (float64(cpuDelta) / float64(systemCPUDelta)) * float64(resp.CPUStats.OnlineCPUs) * 100.0
 
-		sb.WriteString(fmt.Sprintf("ID: %s, Memory Usage: %.2f%%, CPU Usage: %.2f%%\n", ID, memoryUsage, cpuUsage))
+		sb.WriteString(fmt.Sprintf("ID: %s, \nMemory Usage: %.2f%%, CPU Usage: %.2f%%\n", ID, memoryUsage, cpuUsage))
 
 	}
 	return sb.String()
