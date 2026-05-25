@@ -53,7 +53,7 @@ func fetchContainerList(client http.Client) string {
 
 	/* Unpacking json */
 
-	var resp Resp
+	var resp []Resp
 	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
 		fmt.Printf("Error while unpacking json for ContainerList: %v", err)
 	}
