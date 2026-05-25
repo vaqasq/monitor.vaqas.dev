@@ -56,7 +56,7 @@ func fetchContainerList(client http.Client) string {
 
 	var resp Resp
 	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
-		fmt.Printf("Error while unpacking json: %v", err)
+		fmt.Printf("Error while unpacking json for ContainerList: %v", err)
 	}
 	// Responses are now in resp.State, resp.Status, resp.Health, etc
 
@@ -96,7 +96,7 @@ func fetchLiveContainerMetrics(client http.Client) string {
 
 	var resp Resp
 	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
-		fmt.Printf("Error while unpacking json: %v", err)
+		fmt.Printf("Error while unpacking json for LiveContainerMetrics: %v", err)
 	}
 
 	// Memory usage % = (used_memory / available_memory) * 100.0
