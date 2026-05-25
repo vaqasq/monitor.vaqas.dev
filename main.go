@@ -21,8 +21,8 @@ func main() {
 		},
 	}
 
-	fmt.Printf("\nContainer List Data: %v\n", fetchContainerList(httpc))
-	fmt.Printf("Live Container Metrics: %v\n", fetchLiveContainerMetrics(httpc)) // This is, by default, a live stream, but I made it just 1 json"
+	fmt.Printf("\nContainer List Data\n %v\n", fetchContainerList(httpc))
+	fmt.Printf("Live Container Metrics\n %v\n", fetchLiveContainerMetrics(httpc)) // This is, by default, a live stream, but I made it just 1 json"
 
 }
 
