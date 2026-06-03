@@ -67,6 +67,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error creating table: ", err)
 	}
+	log.Println("Table created or already exists")
 
 	// Adding data to table every 30 seconds
 
