@@ -2,16 +2,39 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
+	"math"
 	"net"
 	"net/http"
 	"strings"
+	"time"
+
+	_ "modernc.org/sqlite"
 )
+
+// Package level vars
+type Container struct {
+	id                  string
+	name                string
+	state               string
+	status              string
+	healthStatus        string
+	healthFailingStreak int
+}
+
+type ContainerMetrics struct {
+	id          string
+	memoryUsage float64
+	cpuUsage    float64
+}
 
 func main() {
 
 	/* Creates an internet unix socket in the machine, dial is wrapped in transport, which is wrapped in client */
+
 	httpc := http.Client{
 		Transport: &http.Transport{
 			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
@@ -20,13 +43,73 @@ func main() {
 		},
 	}
 
-	ContainerInfoList, IDs := fetchContainerList(httpc)
-	fmt.Printf("\nContainer List Data\n%v\n", ContainerInfoList)
-	fmt.Printf("Live Container Metrics\n%v\n", fetchLiveContainerMetrics(httpc, IDs)) // This is, by default, a live stream, but I made it just 1 json"
+	// SQLite
+
+	// Open/Make the table
+	db, err := sql.Open("sqlite", "history.sqlite")
+	if err != nil {
+		log.Fatal("Failed to open connection to history.sqlite: ", err)
+	}
+	defer db.Close()
+
+	db.SetMaxOpenConns(1)
+
+	// Create table format
+	createTable := `CREATE TABLE IF NOT EXISTS history (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		container_id TEXT NOT NULL,
+		container_name TEXT NOT NULL,
+		timestamp TEXT NOT NULL,
+		cpu_percent REAL NOT NULL,
+		memory_percent REAL NOT NULL
+	);`
+	_, err = db.Exec(createTable)
+	if err != nil {
+		log.Fatal("Error creating table: ", err)
+	}
+
+	// Adding data to table every 30 seconds
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	insertSQLData(httpc, db)
+	for range ticker.C {
+		insertSQLData(httpc, db)
+	}
 
 }
 
-func fetchContainerList(client http.Client) (string, []string) {
+func insertSQLData(client http.Client, db *sql.DB) {
+
+	// access slice of containers from fetchContainerList.
+	containers := fetchContainerList(client)
+
+	// Get IDs to pass into fetchLiveContainerMetrics
+	var containerIDs []string
+	for _, cont := range containers {
+		containerIDs = append(containerIDs, cont.id)
+	}
+
+	// access slice of containerMetrics from fetchLiveContainerMetrics
+	containerMetrics := fetchLiveContainerMetrics(client, containerIDs)
+
+	for i, cont := range containers {
+
+		now := time.Now()
+
+		_, err := db.Exec("INSERT INTO history (container_id, container_name, timestamp, cpu_percent, memory_percent) VALUES (?, ?, ?, ?, ?)",
+			cont.id, cont.name, now.Format("2006-01-02 15:04:05"), containerMetrics[i].cpuUsage, containerMetrics[i].memoryUsage)
+
+		if err != nil {
+			log.Println("Error inserting row: ", err)
+		}
+
+	}
+
+}
+
+func fetchContainerList(client http.Client) []Container {
 
 	/* Nested structs to recieve json data*/
 	type Health struct {
@@ -65,26 +148,31 @@ func fetchContainerList(client http.Client) (string, []string) {
 	}
 	// Responses are now in resp.State, resp.Status, resp.Health, etc
 
-	// return values
-	var sb strings.Builder
-	var containerIDs []string
+	// return value
+	var containers []Container
 
 	// Must iterate because Resp is now a slice
 	for _, container := range resp {
 
-		// join the slice of strings of Names
-		names := strings.Join(container.Names, " ")
+		name := strings.Join(container.Names, " ")
 
-		sb.WriteString(fmt.Sprintf("IDs: %s, Names: %s, State: %s, Status: %s, Health.Status: %s, Health.FailingStreak: %d\n",
-			container.ID, names, container.State, container.Status, container.Health.Status, container.Health.FailingStreak))
+		cont := Container{
+			id:                  container.ID,
+			name:                name,
+			state:               container.State,
+			status:              container.Status,
+			healthStatus:        container.Health.Status,
+			healthFailingStreak: container.Health.FailingStreak,
+		}
 
-		containerIDs = append(containerIDs, container.ID)
+		containers = append(containers, cont)
+
 	}
 
-	return sb.String(), containerIDs
+	return containers
 }
 
-func fetchLiveContainerMetrics(client http.Client, containerIDs []string) string {
+func fetchLiveContainerMetrics(client http.Client, containerIDs []string) []ContainerMetrics {
 
 	/* Structs to recieve json data*/
 
@@ -116,7 +204,7 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) string
 
 	/* Request json */
 
-	var sb strings.Builder
+	var containerMetrics []ContainerMetrics
 
 	for _, ID := range containerIDs {
 		response, err := client.Get("http://localhost/containers/" + ID + "/stats?stream=false") //will need to revert this at some point
@@ -124,10 +212,6 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) string
 		if err != nil {
 			fmt.Printf("Error while fetching Live Container Metrics: %v", err)
 		}
-
-		/* Debugging code
-		body, _ := io.ReadAll(response.Body)
-		return string(body) */
 
 		/* Unpacking json */
 
@@ -149,8 +233,17 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) string
 
 		cpuUsage := (float64(cpuDelta) / float64(systemCPUDelta)) * float64(resp.CPUStats.OnlineCPUs) * 100.0
 
-		sb.WriteString(fmt.Sprintf("ID: %s, \nMemory Usage: %.2f%%, CPU Usage: %.2f%%\n", ID, memoryUsage, cpuUsage))
+		memoryUsage = math.Round(memoryUsage*100) / 100
+		cpuUsage = math.Round(cpuUsage*100) / 100
+
+		cont := ContainerMetrics{
+			id:          ID,
+			memoryUsage: memoryUsage,
+			cpuUsage:    cpuUsage,
+		}
+
+		containerMetrics = append(containerMetrics, cont)
 
 	}
-	return sb.String()
+	return containerMetrics
 }
