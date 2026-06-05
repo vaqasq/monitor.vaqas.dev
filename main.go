@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"math"
 	"net"
@@ -59,6 +60,7 @@ func main() {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		container_id TEXT NOT NULL,
 		container_name TEXT NOT NULL,
+		status TEXT NOT NULL,
 		timestamp TEXT NOT NULL,
 		cpu_percent REAL NOT NULL,
 		memory_percent REAL NOT NULL
@@ -67,18 +69,78 @@ func main() {
 	if err != nil {
 		log.Fatal("Error creating table: ", err)
 	}
-	log.Println("Table created or already exists")
 
-	// Adding data to table every 30 seconds
+	// Adding data to table every 30 seconds. Needs its own goroutine, running concurrently with main goroutine since it is a ticker.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
 
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	insertSQLData(httpc, db)
-	for range ticker.C {
 		insertSQLData(httpc, db)
-	}
+		for range ticker.C {
+			insertSQLData(httpc, db)
+		}
+	}()
 
+	// Insert http
+	http.HandleFunc("/", handler(db))
+	http.Handle("/static-files/", http.StripPrefix("/static-files/", http.FileServer(http.Dir("./static-files"))))
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func handler(db *sql.DB) http.HandlerFunc { //wrapped the handler func because I need the to do the api calls.
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		// Call sqlite and get the data
+
+		query := "SELECT container_name, status, timestamp, cpu_percent, memory_percent FROM history ORDER BY timestamp DESC LIMIT 2"
+
+		rows, err := db.Query(query)
+		if err != nil {
+			http.Error(w, "Failed to query database", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		type dashboardData struct {
+			Name        string
+			Status      string
+			Timestamp   string
+			CpuUsage    float64
+			MemoryUsage float64
+		}
+		var data []dashboardData
+
+		for rows.Next() {
+
+			var d dashboardData
+
+			if err := rows.Scan(&d.Name, &d.Status, &d.Timestamp, &d.CpuUsage, &d.MemoryUsage); err != nil {
+				http.Error(w, "Failed to query database", http.StatusInternalServerError)
+				return
+			}
+
+			data = append(data, d)
+
+		}
+
+		if err = rows.Err(); err != nil {
+			http.Error(w, "Error during row interation", http.StatusInternalServerError)
+			return
+		}
+
+		tmpl, err := template.ParseFiles("static-files/index.html")
+
+		if err != nil {
+			http.Error(w, "Failed to parse static files ", http.StatusInternalServerError)
+			return
+		}
+
+		if err := tmpl.Execute(w, data); err != nil {
+			http.Error(w, "Failed to execute templates", http.StatusInternalServerError)
+			return
+		}
+
+	}
 }
 
 func insertSQLData(client http.Client, db *sql.DB) {
@@ -99,8 +161,8 @@ func insertSQLData(client http.Client, db *sql.DB) {
 
 		now := time.Now()
 
-		_, err := db.Exec("INSERT INTO history (container_id, container_name, timestamp, cpu_percent, memory_percent) VALUES (?, ?, ?, ?, ?)",
-			cont.id, cont.name, now.Format("2006-01-02 15:04:05"), containerMetrics[i].cpuUsage, containerMetrics[i].memoryUsage)
+		_, err := db.Exec("INSERT INTO history (container_id, container_name, status, timestamp, cpu_percent, memory_percent) VALUES (?, ?, ?, ?, ?, ?)",
+			cont.id, cont.name, cont.status, now.Format("2006-01-02 15:04:05"), containerMetrics[i].cpuUsage, containerMetrics[i].memoryUsage)
 
 		if err != nil {
 			log.Println("Error inserting row: ", err)
