@@ -307,8 +307,6 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) []Cont
 			cpuUsage = (float64(cpuDelta) / float64(systemCPUDelta)) * float64(numCPUs) * 100.0
 		}
 
-		log.Printf("container: %s | cpuDelta: %d | sysDelta: %d | numCPUs: %d", ID, cpuDelta, systemCPUDelta, numCPUs)
-
 		containerMetrics = append(containerMetrics, ContainerMetrics{
 			id:          ID,
 			memoryUsage: math.Round(memoryUsage*100) / 100,
