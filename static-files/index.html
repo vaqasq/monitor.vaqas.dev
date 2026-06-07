@@ -20,16 +20,16 @@
                     <tr>
                         <th>Container</th>
                         <th>Status</th>
-                        <th>Timestamp</th>
-                        <th>CPU</th>
-                        <th>Memory</th>
+                        <th>Timestamp (ET)</th>
+                        <th>CPU %</th>
+                        <th>Memory %</th>
                     </tr>
                 </thead>
                 <tbody>
                     {{range .}}
                     <tr>
                         <td class="name">{{.Name}}</td>
-                        <td class="status {{.Status}}">● {{.Status}}</td>
+                        <td class="status {{.StatusClass}}">● {{.Status}}</td>
                         <td>{{.Timestamp}}</td>
                         <td>{{.CpuUsage}}</td>
                         <td>{{.MemoryUsage}}</td>
