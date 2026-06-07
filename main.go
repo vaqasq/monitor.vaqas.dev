@@ -84,7 +84,7 @@ func main() {
 	// Insert http
 	http.HandleFunc("/", handler(db))
 	http.Handle("/static-files/", http.StripPrefix("/static-files/", http.FileServer(http.Dir("./static-files"))))
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8081", nil))
 }
 
 func handler(db *sql.DB) http.HandlerFunc { //wrapped the handler func because I need the to do the api calls.
