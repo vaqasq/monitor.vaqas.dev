@@ -1,33 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="refresh" content="30">
-    <title>Monitor Dashboard</title>
+    <title>Monitor — vaqas.dev</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h2>Monitoring Dashboard for vaqas.dev</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Container Names</th>
-                <th>Status</th>
-                <th>Timestamp</th>
-                <th>CPU Usage</th>
-                <th>Memory Usage</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Iterate over the slice of structs passed from Go -->
-            {{range .}}
-            <tr>
-                <td>{{.Name}}</td>
-                <td>{{.Status}}</td>
-                <td>{{.Timestamp}}</td>
-                <td>{{.CpuUsage}}</td>
-                <td>{{.MemoryUsage}}</td>
-            </tr>
-            {{end}}
-        </tbody>
-    </table>
+    <div class="container">
+        <header>
+            <p class="label">container health monitor</p>
+            <h1><span class="green">monitor</span>.vaqas.dev</h1>
+            <p class="refresh-note">auto-refreshes every 30s</p>
+        </header>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Container</th>
+                        <th>Status</th>
+                        <th>Timestamp</th>
+                        <th>CPU</th>
+                        <th>Memory</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .}}
+                    <tr>
+                        <td class="name">{{.Name}}</td>
+                        <td class="status {{.Status}}">● {{.Status}}</td>
+                        <td>{{.Timestamp}}</td>
+                        <td>{{.CpuUsage}}</td>
+                        <td>{{.MemoryUsage}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </body>
 </html>
