@@ -303,7 +303,16 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) []Cont
 		if numCPUs == 0 {
 			numCPUs = 1
 		}
-		cpuUsage := (float64(cpuDelta) / float64(systemCPUDelta)) * float64(numCPUs) * 100.0
+
+		var cpuUsage float64
+
+		if systemCPUDelta == 0 {
+			cpuUsage = 0.0
+		} else {
+			cpuUsage = (float64(cpuDelta) / float64(systemCPUDelta)) * float64(numCPUs) * 100.0
+		}
+
+		log.Printf("container: %s | cpuDelta: %d | sysDelta: %d | numCPUs: %d", ID, cpuDelta, systemCPUDelta, numCPUs)
 
 		memoryUsage = math.Round(memoryUsage*100) / 100
 		cpuUsage = math.Round(cpuUsage*100) / 100
