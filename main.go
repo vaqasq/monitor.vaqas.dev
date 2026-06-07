@@ -92,7 +92,7 @@ func handler(db *sql.DB) http.HandlerFunc { //wrapped the handler func because I
 
 		// Call sqlite and get the data
 
-		query := "SELECT container_name, status, timestamp, cpu_percent, memory_percent FROM history ORDER BY timestamp DESC LIMIT 2"
+		query := "SELECT container_name, status, timestamp, cpu_percent, memory_percent FROM history ORDER BY id DESC LIMIT 2"
 
 		rows, err := db.Query(query)
 		if err != nil {
@@ -241,8 +241,6 @@ func fetchContainerList(client http.Client) []Container {
 
 func fetchLiveContainerMetrics(client http.Client, containerIDs []string) []ContainerMetrics {
 
-	/* Structs to recieve json data*/
-
 	type CPUUsage struct {
 		TotalUsage int `json:"total_usage"`
 	}
@@ -250,11 +248,6 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) []Cont
 	type MemoryStats struct {
 		Usage int `json:"usage"`
 		Limit int `json:"limit"`
-	}
-
-	type PreCPUStats struct {
-		CPUUsage       CPUUsage `json:"cpu_usage"`
-		SystemCPUUsage int      `json:"system_cpu_usage"`
 	}
 
 	type CPUStats struct {
@@ -265,68 +258,68 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) []Cont
 
 	type Resp struct {
 		MemoryStats MemoryStats `json:"memory_stats"`
-		PreCPUStats PreCPUStats `json:"precpu_stats"`
 		CPUStats    CPUStats    `json:"cpu_stats"`
 	}
-
-	/* Request json */
 
 	var containerMetrics []ContainerMetrics
 
 	for _, ID := range containerIDs {
-		response, err := client.Get("http://localhost/containers/" + ID + "/stats?stream=false") //will need to revert this at some point
-
+		resp1, err := fetchStats(client, ID)
 		if err != nil {
-			fmt.Printf("Error while fetching Live Container Metrics: %v", err)
+			log.Printf("Error fetching first stats for %s: %v", ID, err)
+			continue
 		}
-
-		/* Unpacking json */
-
-		var resp Resp
-
-		if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
-			fmt.Printf("Error while unpacking json for LiveContainerMetrics: %v", err)
+		var snap1 Resp
+		if err := json.NewDecoder(resp1.Body).Decode(&snap1); err != nil {
+			resp1.Body.Close()
+			log.Printf("Error decoding first stats for %s: %v", ID, err)
+			continue
 		}
+		resp1.Body.Close()
 
-		response.Body.Close()
+		time.Sleep(100 * time.Millisecond)
 
-		// Memory usage % = (used_memory / available_memory) * 100.0
-		// CPU usage % = (cpu_delta / system_cpu_delta) * number_cpus * 100.0
+		resp2, err := fetchStats(client, ID)
+		if err != nil {
+			log.Printf("Error fetching second stats for %s: %v", ID, err)
+			continue
+		}
+		var snap2 Resp
+		if err := json.NewDecoder(resp2.Body).Decode(&snap2); err != nil {
+			resp2.Body.Close()
+			log.Printf("Error decoding second stats for %s: %v", ID, err)
+			continue
+		}
+		resp2.Body.Close()
 
-		memoryUsage := (float64(resp.MemoryStats.Usage) / float64(resp.MemoryStats.Limit)) * 100.0
+		memoryUsage := (float64(snap2.MemoryStats.Usage) / float64(snap2.MemoryStats.Limit)) * 100.0
 
-		cpuDelta := resp.CPUStats.CPUUsage.TotalUsage - resp.PreCPUStats.CPUUsage.TotalUsage
-		systemCPUDelta := resp.CPUStats.SystemCPUUsage - resp.PreCPUStats.SystemCPUUsage
+		cpuDelta := snap2.CPUStats.CPUUsage.TotalUsage - snap1.CPUStats.CPUUsage.TotalUsage
+		systemCPUDelta := snap2.CPUStats.SystemCPUUsage - snap1.CPUStats.SystemCPUUsage
 
-		numCPUs := resp.CPUStats.OnlineCPUs
-
+		numCPUs := snap2.CPUStats.OnlineCPUs
 		if numCPUs == 0 {
 			numCPUs = 1
 		}
 
 		var cpuUsage float64
-
-		if systemCPUDelta == 0 {
-			cpuUsage = 0.0
-		} else {
+		if systemCPUDelta > 0 {
 			cpuUsage = (float64(cpuDelta) / float64(systemCPUDelta)) * float64(numCPUs) * 100.0
 		}
 
 		log.Printf("container: %s | cpuDelta: %d | sysDelta: %d | numCPUs: %d", ID, cpuDelta, systemCPUDelta, numCPUs)
 
-		memoryUsage = math.Round(memoryUsage*100) / 100
-		cpuUsage = math.Round(cpuUsage*100) / 100
-
-		cont := ContainerMetrics{
+		containerMetrics = append(containerMetrics, ContainerMetrics{
 			id:          ID,
-			memoryUsage: memoryUsage,
-			cpuUsage:    cpuUsage,
-		}
-
-		containerMetrics = append(containerMetrics, cont)
-
+			memoryUsage: math.Round(memoryUsage*100) / 100,
+			cpuUsage:    math.Round(cpuUsage*100) / 100,
+		})
 	}
 	return containerMetrics
+}
+
+func fetchStats(client http.Client, id string) (*http.Response, error) {
+	return client.Get("http://localhost/containers/" + id + "/stats?stream=false")
 }
 
 func statusClass(status string) string {
