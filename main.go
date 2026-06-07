@@ -104,6 +104,7 @@ func handler(db *sql.DB) http.HandlerFunc { //wrapped the handler func because I
 		type dashboardData struct {
 			Name        string
 			Status      string
+			StatusClass string
 			Timestamp   string
 			CpuUsage    float64
 			MemoryUsage float64
@@ -118,6 +119,8 @@ func handler(db *sql.DB) http.HandlerFunc { //wrapped the handler func because I
 				http.Error(w, "Failed to query database", http.StatusInternalServerError)
 				return
 			}
+
+			d.StatusClass = statusClass(d.Status)
 
 			data = append(data, d)
 
@@ -157,12 +160,13 @@ func insertSQLData(client http.Client, db *sql.DB) {
 	// access slice of containerMetrics from fetchLiveContainerMetrics
 	containerMetrics := fetchLiveContainerMetrics(client, containerIDs)
 
+	est, _ := time.LoadLocation("America/New_York")
+	now := time.Now().In(est).Format("2006-01-02 15:04:05")
+
 	for i, cont := range containers {
 
-		now := time.Now()
-
 		_, err := db.Exec("INSERT INTO history (container_id, container_name, status, timestamp, cpu_percent, memory_percent) VALUES (?, ?, ?, ?, ?, ?)",
-			cont.id, cont.name, cont.status, now.Format("2006-01-02 15:04:05"), containerMetrics[i].cpuUsage, containerMetrics[i].memoryUsage)
+			cont.id, cont.name, cont.status, now, containerMetrics[i].cpuUsage, containerMetrics[i].memoryUsage)
 
 		if err != nil {
 			log.Println("Error inserting row: ", err)
@@ -294,7 +298,12 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) []Cont
 		cpuDelta := resp.CPUStats.CPUUsage.TotalUsage - resp.PreCPUStats.CPUUsage.TotalUsage
 		systemCPUDelta := resp.CPUStats.SystemCPUUsage - resp.PreCPUStats.SystemCPUUsage
 
-		cpuUsage := (float64(cpuDelta) / float64(systemCPUDelta)) * float64(resp.CPUStats.OnlineCPUs) * 100.0
+		numCPUs := resp.CPUStats.OnlineCPUs
+
+		if numCPUs == 0 {
+			numCPUs = 1
+		}
+		cpuUsage := (float64(cpuDelta) / float64(systemCPUDelta)) * float64(numCPUs) * 100.0
 
 		memoryUsage = math.Round(memoryUsage*100) / 100
 		cpuUsage = math.Round(cpuUsage*100) / 100
@@ -309,4 +318,15 @@ func fetchLiveContainerMetrics(client http.Client, containerIDs []string) []Cont
 
 	}
 	return containerMetrics
+}
+
+func statusClass(status string) string {
+	s := strings.ToLower(status)
+	if strings.Contains(s, "up") {
+		return "running"
+	}
+	if strings.Contains(s, "paused") {
+		return "paused"
+	}
+	return "stopped"
 }
