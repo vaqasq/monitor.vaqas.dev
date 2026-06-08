@@ -4,6 +4,12 @@ A long-running Go daemon that monitors Docker containers through the Docker Engi
 
 I built this instead of using the Docker SDK so I could work directly with the underlying HTTP API. This meant writing the transport layer myself, manually parsing JSON responses, and understanding exactly what the SDK normally hides from you.
 
+![Go](https://img.shields.io/badge/Go-00ADD8?style=flat&logo=go&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat&logo=sqlite&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
+![systemd](https://img.shields.io/badge/systemd-000000?style=flat&logoColor=white)
+
 ## What it does
 
 - Polls all running containers every 30 seconds via the Docker Engine API
