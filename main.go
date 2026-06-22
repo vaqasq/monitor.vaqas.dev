@@ -81,10 +81,69 @@ func main() {
 		}
 	}()
 
+	router := http.NewServeMux()
+
 	// Insert http
-	http.HandleFunc("/", handler(db))
-	http.Handle("/static-files/", http.StripPrefix("/static-files/", http.FileServer(http.Dir("./static-files"))))
-	log.Fatal(http.ListenAndServe(":8081", nil))
+	router.HandleFunc("/", handler(db))
+	router.Handle("/static-files/", http.StripPrefix("/static-files/", http.FileServer(http.Dir("./static-files"))))
+	router.HandleFunc("/api/containers", getContainersHandler(db))
+	log.Fatal(http.ListenAndServe(":8081", router))
+}
+
+func getContainersHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		type ContainerResponse struct {
+			Name        string  `json:"name"`
+			Status      string  `json:"status"`
+			Timestamp   string  `json:"timestamp"`
+			CpuUsage    float64 `json:"cpu_usage"`
+			MemoryUsage float64 `json:"memory_usage"`
+		}
+
+		// Call sqlite and get the data
+
+		query := "SELECT container_name, status, timestamp, cpu_percent, memory_percent FROM history ORDER BY id DESC LIMIT 2"
+		// assumes exactly 2 containers: caddy + vaqas.dev
+
+		rows, err := db.Query(query)
+		if err != nil {
+			http.Error(w, "Failed to query database", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var data []ContainerResponse
+
+		for rows.Next() {
+
+			var d ContainerResponse
+
+			if err := rows.Scan(&d.Name, &d.Status, &d.Timestamp, &d.CpuUsage, &d.MemoryUsage); err != nil {
+				http.Error(w, "Failed to query database", http.StatusInternalServerError)
+				return
+			}
+
+			data = append(data, d)
+
+		}
+
+		if err = rows.Err(); err != nil {
+			http.Error(w, "Error during row interation", http.StatusInternalServerError)
+			return
+		}
+
+		// Json encoding of data
+
+		items, err := json.Marshal(data)
+		if err != nil {
+			http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(items)
+
+	}
 }
 
 func handler(db *sql.DB) http.HandlerFunc { //wrapped the handler func because I need the to do the api calls.
@@ -93,6 +152,7 @@ func handler(db *sql.DB) http.HandlerFunc { //wrapped the handler func because I
 		// Call sqlite and get the data
 
 		query := "SELECT container_name, status, timestamp, cpu_percent, memory_percent FROM history ORDER BY id DESC LIMIT 2"
+		// assumes exactly 2 containers: caddy + vaqas.dev
 
 		rows, err := db.Query(query)
 		if err != nil {
