@@ -87,7 +87,63 @@ func main() {
 	router.HandleFunc("/", handler(db))
 	router.Handle("/static-files/", http.StripPrefix("/static-files/", http.FileServer(http.Dir("./static-files"))))
 	router.HandleFunc("/api/containers", getContainersHandler(db))
+	router.HandleFunc("/api/history", getHistoryHandler(db))
 	log.Fatal(http.ListenAndServe(":8081", router))
+}
+
+func getHistoryHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		type HistoryResponse struct {
+			Name        string  `json:"name"`
+			Timestamp   string  `json:"timestamp"`
+			CpuUsage    float64 `json:"cpu_usage"`
+			MemoryUsage float64 `json:"memory_usage"`
+		}
+
+		// Call sqlite and get the data
+
+		query := "SELECT container_name, timestamp, cpu_percent, memory_percent FROM history ORDER BY id DESC LIMIT 120"
+		// assumes exactly 2 containers: caddy + vaqas.dev
+		// LIMIT 120, 60 per each of the 2 containers, leading to up-to-date metrics for the past 30 minutes. (New SQL row every 30 seconds)
+
+		rows, err := db.Query(query)
+		if err != nil {
+			http.Error(w, "Failed to query database", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		data := make([]HistoryResponse, 0, 120)
+
+		for rows.Next() {
+
+			var d HistoryResponse
+
+			if err := rows.Scan(&d.Name, &d.Timestamp, &d.CpuUsage, &d.MemoryUsage); err != nil {
+				http.Error(w, "Failed to query database", http.StatusInternalServerError)
+				return
+			}
+
+			data = append(data, d)
+
+		}
+
+		if err = rows.Err(); err != nil {
+			http.Error(w, "Error during row interation", http.StatusInternalServerError)
+			return
+		}
+
+		// Json encoding of data
+
+		items, err := json.Marshal(data)
+		if err != nil {
+			http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(items)
+	}
 }
 
 func getContainersHandler(db *sql.DB) http.HandlerFunc {
@@ -258,6 +314,7 @@ func fetchContainerList(client http.Client) []Container {
 
 	if err != nil {
 		fmt.Printf("Error while fetching Container List: %v ", err)
+		return nil
 	}
 
 	defer response.Body.Close()
@@ -272,6 +329,7 @@ func fetchContainerList(client http.Client) []Container {
 	var resp []Resp
 	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
 		fmt.Printf("Error while unpacking json for ContainerList: %v", err)
+		return nil
 	}
 	// Responses are now in resp.State, resp.Status, resp.Health, etc
 
