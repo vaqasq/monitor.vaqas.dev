@@ -1,6 +1,6 @@
 # Container Health Monitor
 
-A long-running Go daemon that monitors Docker containers through the Docker Engine API over a Unix socket. Metrics are stored in SQLite and displayed on a live dashboard at [monitor.vaqas.dev](https://monitor.vaqas.dev).
+A long-running Go daemon that monitors Docker containers through the Docker Engine API over a Unix socket. Metrics are stored in SQLite. The original dashboard is server-rendered and lives at [monitor.vaqas.dev](https://monitor.vaqas.dev). A newer React and TypeScript client, built against the same backend, lives at [dashboard.vaqas.dev](https://dashboard.vaqas.dev).
 
 I built this instead of using the Docker SDK so I could work directly with the underlying HTTP API. This meant writing the transport layer myself, manually parsing JSON responses, and understanding exactly what the SDK normally hides from you.
 
@@ -16,11 +16,12 @@ I built this instead of using the Docker SDK so I could work directly with the u
 - Calculates CPU% and memory% from raw kernel counters returned by the API
 - Persists metrics to a SQLite database using Go's `database/sql`
 - Serves a server-side rendered dashboard using `html/template`
+- Exposes the same data as JSON over `/api/containers` and `/api/history`, with CORS enabled, for the separate React client
 - Runs as a systemd service on a self-managed Ubuntu VPS, routed through Caddy
 
 ## Architecture
 
-The daemon runs as a systemd service directly on the host. Every 30 seconds it polls the Docker Engine through `/var/run/docker.sock` and writes the results to SQLite. When someone visits the dashboard, the Go HTTP server queries the most recent row per container and renders the page server-side using `html/template`. Caddy handles TLS and routes public traffic to the server.
+The daemon runs as a systemd service directly on the host. Every 30 seconds it polls the Docker Engine through `/var/run/docker.sock` and writes the results to SQLite. All routes are registered on a single `http.ServeMux`. When someone visits the dashboard, the Go HTTP server queries the most recent row per container and renders the page server-side using `html/template`. The same data is also available as JSON through two read-only endpoints, which the React client at dashboard.vaqas.dev polls directly. Caddy handles TLS and routes public traffic to the server.
 
 ## Technical decisions
 
@@ -30,15 +31,17 @@ The daemon runs as a systemd service directly on the host. Every 30 seconds it p
 
 **modernc.org/sqlite over PostgreSQL** - SQLite is more than enough for two containers at 30-second intervals. No separate process to manage, no configuration, just a single file on disk.
 
-**Server-side rendering over a JS frontend** - Go's `html/template` renders the dashboard on the server. No JavaScript framework, no build step. The page refreshes every 30 seconds using an HTML meta tag.
+**Server-side rendering, plus a separate JSON layer** - the original dashboard still uses Go's `html/template`, no JavaScript framework, no build step. Rebuilding that same page in React would have been a pointless rewrite, so instead I added two JSON endpoints on top of the existing daemon and built a separate React and TypeScript client against them. Same backend, two different frontends.
 
-**systemd over Docker** - the daemon needs direct access to `/var/run/docker.sock` on the host. Running it as a systemd service is simpler and more appropriate than mounting the socket into a container.
+**systemd over Docker for the daemon** - the daemon needs direct access to `/var/run/docker.sock` on the host. Running it as a systemd service is simpler and more appropriate than mounting the socket into a container.
 
 ## What I learned
 
 - How to make HTTP requests over a Unix socket in Go using a custom transport
 - How the Docker Engine API works at the HTTP level, including how CPU usage is calculated from raw kernel deltas
 - How to use Go's `database/sql` with SQLite for persistent storage
+- How to structure multiple routes on a single `http.ServeMux` instead of the default global mux
+- Why CORS exists and when it actually needs to be handled
 - How to deploy a Go binary as a systemd service and set up a reverse proxy with Caddy
 - Why exposing Docker's TCP port without TLS is dangerous
 
@@ -60,4 +63,4 @@ cd monitor.vaqas.dev
 go run main.go
 ```
 
-Dashboard available at `http://localhost:8081`.
+Dashboard available at `http://localhost:8081`. JSON endpoints available at `/api/containers` and `/api/history`.
