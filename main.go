@@ -141,6 +141,7 @@ func getHistoryHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(items)
 	}
@@ -196,6 +197,7 @@ func getContainersHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(items)
 
