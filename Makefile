@@ -12,5 +12,3 @@ staticcheck: vet
 
 build: staticcheck
 	GOARCH=amd64 GOOS=linux go build 
-
-# consider staticcheck, govulncheck, etc
